@@ -11,7 +11,7 @@ add = subparsers.add_parser("add")
 add.add_argument('--description', '--d', type=str, metavar='', required=True, help="Expense description")
 add.add_argument('--amount', '--a', type=int, metavar='', required=True, help="Expense description")
 add.add_argument('--category', '--c', type=str, metavar='', required=False, help="Expense category")
-add.add_argument('--date', '--t', type=str, metavar='', required=False, help="Expense creaton date")
+add.add_argument('--date', '--t', type=int, metavar='', required=False, help="Expense creaton date")
 
 #   "update" subcommand
 update = subparsers.add_parser("update")
@@ -19,7 +19,7 @@ update.add_argument('--id', type=int, metavar='', required=True, help="Expense I
 update.add_argument('--description', '--d', type=str, metavar='', required=False, help="Expense description")
 update.add_argument('--amount', '--a', type=int, metavar='', required=False, help="Expense description")
 update.add_argument('--category', '--c', type=str, metavar='', required=False, help="Expense category")
-update.add_argument('--date', '--t', type=str, metavar='', required=False, help="Expense creaton date")
+update.add_argument('--date', '--t', type=int, metavar='', required=False, help="Expense creaton date")
 
 #   "delete" subcommand
 delete = subparsers.add_parser("delete")
@@ -47,7 +47,7 @@ def create_expense(args, expenses):
     if expenses:
         new_id = max(expense["id"] for expense in expenses) + 1
     else:
-        new_id = 0
+        new_id = 1
         
     new_expense = {
         "id": new_id,
@@ -57,61 +57,94 @@ def create_expense(args, expenses):
         "category": args.category if args.category else "default"
     }
     expenses.append(new_expense)
-    print(f"Expense added successfully (ID: {args.id})")
+    print(f"Expense added successfully (ID: {new_id})")
 
+def delete_expense(args, expenses):
+    id_exists = any(expense.get('id') == args.id for expense in expenses)
+    expenses = [expense for expense in expenses if expense["id"] != args.id]
+    print("Expense deleted successfully") if id_exists else print("Expense whith such ID wasn't found")
+
+def update_expense(args, expenses):
+    id_exists = False
+    for expense in expenses:
+        if expense["id"] == args.id:
+            id_exists = True
+            if args.description: expense["description"] = args.description
+            if args.amount: expense["amount"] = args.amount
+            if args.category: expense["category"] = args.category
+            if args.date: expense["date"] = args.date
+            break
+    if id_exists:
+        print(f"Expense updated successfully")
+    else:
+        print("Expense whith such ID wasn't found")
+
+def list_expenses(args, expenses):
+    if args.category:
+        if not expenses:
+            print("No categories found!")
+        else:
+            print("List of all categories:")
+            for expense in expenses:
+                print(f"{expense["category"]}")
+
+        pass
+    else:
+        id_len = 4
+        description_len = 12
+        amount_len = 8
+        category_len = 8
+        date_len = 10
+        for expense in expenses:
+            if len(str(expense["id"])) > id_len: id_len = len(str(expense["id"])) 
+            if len(expense["description"]) > description_len: description_len = len(expense["description"]) 
+            if len(str(expense["amount"])) > amount_len: amount_len = len(str(expense["amount"])) 
+            if len(expense["category"]) > category_len: category_len = len(expense["category"]) 
+            if len(expense["date"]) > date_len:  date_len = len(str(expense["date"])) 
+
+        headers = f"{'ID':<{id_len}} {'Description':<{description_len}} {'Amount':<{amount_len}} {'Category':<{category_len}} {'Date':<{category_len}}"
+
+        if not expenses:
+            print("No tasks found!")
+        else:
+            print("List of all tasks:")
+            print(headers)
+            for expense in expenses:
+                print(f"{expense["id"]:<{id_len}} {expense["description"]:<{description_len}} {expense["amount"]:<{amount_len}} {expense["category"]:<{category_len}} {expense["date"][:19].replace("T", " "):<25}")
 
 if __name__ == "__main__":
+
     try:
         with open("expenses.json", "r") as file:
             expenses = json.load(file)
-    except FileNotFoundError:
-        expenses = []
-    except json.JSONDecodeError:
-        expenses = []
+    except FileNotFoundError: expenses = []
+    except json.JSONDecodeError: expenses = []
 
     if args.command == "add":
-        if args.date and args.category:
-            print(f"Added: {args.description} {args.amount} {args.category} {args.date}")
-        elif args.date:
-            print(f"Added: {args.description} {args.amount} {args.date}")
-        elif args.category:
-            print(f"Added: {args.description} {args.amount} {args.category}")
-        else:
-            print(f"Added: {args.description} {args.amount}")
+        create_expense(args, expenses)
 
     elif args.command == "update":
-        updated = []
-        if args.description: updated.append(f"description='{args.description}'")
-        if args.amount: updated.append(f"amount={args.amount}")
-        if args.category: updated.append(f"category='{args.category}'")
-        if args.date: updated.append(f"date='{args.date}'")
-
-        if updated:
-            print(f"Updated ID {args.id}: {', '.join(updated)}")
-        else:
-            print("Nothing to update!")
+        update_expense(args, expenses)
 
     elif args.command == "delete":
-        print(f"Delete ID: {args.id}")
+        delete_expense(args, expenses)
 
     elif args.command == "list":
-        if args.category:
-            print(f"List by category: {args.category}")
-        elif args.mouth:
-            print(f"List by mounth: {args.mouth}")
-        elif args.year:
-            print(f"List by year: {args.year}")
-        else:
-            print(f"List: All Expenses")
+        list_expenses(args, expenses)
+
 
     elif args.command == "budget":
         if args.mouth:
             print(f"Set Mounth budget: {args.mouth}")
         elif args.year:
             print(f"Set Year  budget: {args.year}")
-
     elif args.command == "summary":
         if args.mouth:
             print(f"Mounth summary: {args.mouth}")
         elif args.year:
             print(f"Year  summary: {args.year}")
+
+    # Save to JSON
+    with open("expenses.json", "w") as file:
+        json.dump(expenses, file, indent=4)
+
