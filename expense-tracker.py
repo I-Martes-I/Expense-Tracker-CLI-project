@@ -1,4 +1,7 @@
 import argparse
+import sys
+import json
+import datetime
 
 parser = argparse.ArgumentParser(description="Expense Tracker")
 subparsers = parser.add_subparsers(dest="command")
@@ -33,9 +36,39 @@ budget = subparsers.add_parser("budget")
 budget.add_argument('--mouth', '--m', type=int, metavar='', required=False, help="Mounth budget")
 budget.add_argument('--year', '--y', type=int, metavar='', required=False, help="Year budget")
 
+#   "summary" subcommand
+summary = subparsers.add_parser("summary")
+summary.add_argument('--month', type=int, metavar='', required=False)
+summary.add_argument('--year', type=int, metavar='', required=False)
+
 args = parser.parse_args()
 
+def create_expense(args, expenses):
+    if expenses:
+        new_id = max(expense["id"] for expense in expenses) + 1
+    else:
+        new_id = 0
+        
+    new_expense = {
+        "id": new_id,
+        "description": args.description,
+        "amount": args.amount,
+        "date": args.date if args.date else datetime.datetime.now().isoformat(),
+        "category": args.category if args.category else "default"
+    }
+    expenses.append(new_expense)
+    print(f"Expense added successfully (ID: {args.id})")
+
+
 if __name__ == "__main__":
+    try:
+        with open("expenses.json", "r") as file:
+            expenses = json.load(file)
+    except FileNotFoundError:
+        expenses = []
+    except json.JSONDecodeError:
+        expenses = []
+
     if args.command == "add":
         if args.date and args.category:
             print(f"Added: {args.description} {args.amount} {args.category} {args.date}")
@@ -47,16 +80,16 @@ if __name__ == "__main__":
             print(f"Added: {args.description} {args.amount}")
 
     elif args.command == "update":
-        if args.description and args.amount and args.category and args.date:
-            print(f"Updated: {args.id} {args.description} {args.amount} {args.category} {args.date}")
-        elif args.description:
-            print(f"Updated: {args.description}")
-        elif args.amount:
-            print(f"Updated: {args.amount}")
-        elif args.category:
-            print(f"Updated: {args.category}")
-        elif args.date:
-            print(f"Updated: {args.date}")
+        updated = []
+        if args.description: updated.append(f"description='{args.description}'")
+        if args.amount: updated.append(f"amount={args.amount}")
+        if args.category: updated.append(f"category='{args.category}'")
+        if args.date: updated.append(f"date='{args.date}'")
+
+        if updated:
+            print(f"Updated ID {args.id}: {', '.join(updated)}")
+        else:
+            print("Nothing to update!")
 
     elif args.command == "delete":
         print(f"Delete ID: {args.id}")
@@ -76,3 +109,9 @@ if __name__ == "__main__":
             print(f"Set Mounth budget: {args.mouth}")
         elif args.year:
             print(f"Set Year  budget: {args.year}")
+
+    elif args.command == "summary":
+        if args.mouth:
+            print(f"Mounth summary: {args.mouth}")
+        elif args.year:
+            print(f"Year  summary: {args.year}")
