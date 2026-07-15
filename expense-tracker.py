@@ -2,6 +2,7 @@ import argparse
 import sys
 import json
 import datetime
+import calendar
 
 parser = argparse.ArgumentParser(description="Expense Tracker")
 subparsers = parser.add_subparsers(dest="command")
@@ -28,12 +29,12 @@ delete.add_argument('--id', type=int, metavar='', required=True, help="Expense I
 #   "list" subcommand
 list_parser = subparsers.add_parser("list")
 list_parser.add_argument('--category', '--c', type=str, metavar='', required=False, help="Expenses by category")
-list_parser.add_argument('--mouth', '--m', type=int, metavar='', required=False, help="Expenses by mounth")
+list_parser.add_argument('--month', '--m', type=int, metavar='', required=False, help="Expenses by month")
 list_parser.add_argument('--year', '--y', type=int, metavar='', required=False, help="Expenses by year")
 
 #   "budget" subcommand
 budget = subparsers.add_parser("budget")
-budget.add_argument('--mouth', '--m', type=int, metavar='', required=False, help="Mounth budget")
+budget.add_argument('--month', '--m', type=int, metavar='', required=False, help="Month budget")
 budget.add_argument('--year', '--y', type=int, metavar='', required=False, help="Year budget")
 
 #   "summary" subcommand
@@ -61,8 +62,12 @@ def create_expense(args, expenses):
 
 def delete_expense(args, expenses):
     id_exists = any(expense.get('id') == args.id for expense in expenses)
-    expenses = [expense for expense in expenses if expense["id"] != args.id]
-    print("Expense deleted successfully") if id_exists else print("Expense whith such ID wasn't found")
+    if id_exists:
+        print("Expense deleted successfully")
+        return [expense for expense in expenses if expense["id"] != args.id]
+    else:
+        print("Expense with such ID wasn't found")
+        return expenses
 
 def update_expense(args, expenses):
     id_exists = False
@@ -87,8 +92,6 @@ def list_expenses(args, expenses):
             print("List of all categories:")
             for expense in expenses:
                 print(f"{expense["category"]}")
-
-        pass
     else:
         id_len = 4
         description_len = 12
@@ -112,13 +115,50 @@ def list_expenses(args, expenses):
             for expense in expenses:
                 print(f"{expense["id"]:<{id_len}} {expense["description"]:<{description_len}} {expense["amount"]:<{amount_len}} {expense["category"]:<{category_len}} {expense["date"][:19].replace("T", " "):<25}")
 
+def list_summary(args, expenses):
+    count = 0
+    if args.year and args.month:
+        for expense in expenses:
+            date = datetime.datetime.fromisoformat(expense["date"])
+            if args.year == date.year and args.month == date.month: 
+                count += expense["amount"]
+        print(f"Total expenses for {list(calendar.month_name)[args.month]} {args.year}: ${count}")
+    elif args.month:
+        for expense in expenses:
+            date = datetime.datetime.fromisoformat(expense["date"])
+            if args.month == date.month: 
+                count += expense["amount"]
+        print(f"Total expenses for {list(calendar.month_name)[args.month]}: ${count}")
+    elif args.year:
+        for expense in expenses:
+            date = datetime.datetime.fromisoformat(expense["date"])
+            if args.year == date.year: 
+                count += expense["amount"]
+        print(f"Total expenses for year {args.year}: ${count}")
+    elif args.year and args.month:
+        for expense in expenses:
+            date = datetime.datetime.fromisoformat(expense["date"])
+            if args.year == date.year and args.month == date.month: 
+                count += expense["amount"]
+        print(f"Total expenses for {list(calendar.month_name)[args.month]} {args.year}: ${count}")
+    else: 
+        for expense in expenses:
+            count += expense["amount"]
+        print(f"Total expenses: ${count}")
+
 if __name__ == "__main__":
 
     try:
         with open("expenses.json", "r") as file:
             expenses = json.load(file)
-    except FileNotFoundError: expenses = []
-    except json.JSONDecodeError: expenses = []
+    except (FileNotFoundError, json.JSONDecodeError):
+        expenses = []
+
+    try:
+        with open("budgets.json", "r") as file:
+            budget_data = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        budget_data = {}
 
     if args.command == "add":
         create_expense(args, expenses)
@@ -127,24 +167,22 @@ if __name__ == "__main__":
         update_expense(args, expenses)
 
     elif args.command == "delete":
-        delete_expense(args, expenses)
+        expenses = delete_expense(args, expenses)
 
     elif args.command == "list":
         list_expenses(args, expenses)
 
-
     elif args.command == "budget":
-        if args.mouth:
-            print(f"Set Mounth budget: {args.mouth}")
+        if args.month:
+            print(f"Set Month budget: {args.month}")
         elif args.year:
             print(f"Set Year  budget: {args.year}")
+
     elif args.command == "summary":
-        if args.mouth:
-            print(f"Mounth summary: {args.mouth}")
-        elif args.year:
-            print(f"Year  summary: {args.year}")
+        list_summary(args, expenses)
 
     # Save to JSON
     with open("expenses.json", "w") as file:
         json.dump(expenses, file, indent=4)
-
+    with open("budgets.json", "w") as file:
+        json.dump(budgets, file, indent=4)
