@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import sys
 import json
@@ -48,7 +49,6 @@ summary.add_argument('--year', type=int, metavar='', required=False)
 export = subparsers.add_parser("export")
 export.add_argument('--expenses', '--e', action='store_true', help="Export expenses")
 export.add_argument('--budget', '--b', action='store_true', help="Export budget")
-export.add_argument('--output', '--o', type=str, metavar='', required=False, help="Output filename")
 
 args = parser.parse_args()
 
@@ -236,7 +236,7 @@ def export_csv(args, expenses, budget_data):
         return
     
     if args.expenses:
-        filename = args.output if args.output else "expenses.csv"
+        filename = "expenses.csv"
         with open(filename, "w", newline="") as file:
             writer = csv.DictWriter(file, fieldnames=["id", "description", "amount", "date", "category"])
             writer.writeheader()
@@ -244,7 +244,7 @@ def export_csv(args, expenses, budget_data):
         print(f"Expenses exported to {filename}")
 
     if args.budget:
-        filename = args.output if args.output else "budget.csv"
+        filename = "budget.csv"
         with open(filename, "w", newline="") as file:
             writer = csv.writer(file)
             writer.writerow(["year", "yearly_budget", "month", "monthly_budget"])
