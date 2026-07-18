@@ -46,11 +46,22 @@ summary.add_argument('--year', type=int, metavar='', required=False)
 
 #   "export" subcommand
 export = subparsers.add_parser("export")
-export.add_argument('--output', type=str, metavar='', required=False)
+export.add_argument('--expenses', '--e', action='store_true', help="Export expenses")
+export.add_argument('--budget', '--b', action='store_true', help="Export budget")
+export.add_argument('--output', '--o', type=str, metavar='', required=False, help="Output filename")
 
 args = parser.parse_args()
 
 def create_expense(args, expenses, budget_data):
+    if args.amount <= 0:
+        print("Amount must be a positive number!")
+        return
+    if args.date:
+        try:
+            datetime.datetime.fromisoformat(args.date)
+        except ValueError:
+            print("Invalid date format! Use ISO format: 2026-07-14")
+            return
     if expenses:
         new_id = max(expense["id"] for expense in expenses) + 1
     else:
@@ -77,6 +88,15 @@ def delete_expense(args, expenses):
         return expenses
 
 def update_expense(args, expenses, budget_data):
+    if args.amount and args.amount <= 0:
+        print("Amount must be a positive number!")
+        return
+    if args.date:
+        try:
+            datetime.datetime.fromisoformat(args.date)
+        except ValueError:
+            print("Invalid date format! Use ISO format: 2026-07-14")
+            return
     id_exists = False
     for expense in expenses:
         if expense["id"] == args.id:
@@ -92,38 +112,50 @@ def update_expense(args, expenses, budget_data):
         print("Expense whith such ID wasn't found")
     budget_warn(budget_data, expenses)
 
+def print_expenses_table(expenses):
+    if not expenses:
+        print("No expenses found!")
+        return
+    id_len = 4
+    description_len = 12
+    amount_len = 8
+    category_len = 8
+    date_len = 10
+    for expense in expenses:
+        if len(str(expense["id"])) > id_len: id_len = len(str(expense["id"]))
+        if len(expense["description"]) > description_len: description_len = len(expense["description"])
+        if len(str(expense["amount"])) > amount_len: amount_len = len(str(expense["amount"]))
+        if len(expense["category"]) > category_len: category_len = len(expense["category"])
+        if len(expense["date"]) > date_len: date_len = len(str(expense["date"]))
+    headers = f"{'ID':<{id_len}} {'Description':<{description_len}} {'Amount':<{amount_len}} {'Category':<{category_len}} {'Date':<{date_len}}"
+    print(headers)
+    for expense in expenses:
+        print(f"{expense['id']:<{id_len}} {expense['description']:<{description_len}} {expense['amount']:<{amount_len}} {expense['category']:<{category_len}} {expense['date'][:19].replace('T', ' '):<{date_len}}")
+
 def list_expenses(args, expenses):
+    filtered = expenses
+    if args.month or args.year:
+        filtered = []
+        for expense in expenses:
+            date = datetime.datetime.fromisoformat(expense["date"])
+            if args.month and args.month != date.month:
+                continue
+            if args.year and args.year != date.year:
+                continue
+            filtered.append(expense)
+
     if args.category == 'all':
-        categories = set(expense["category"] for expense in expenses)
+        categories = set(expense["category"] for expense in filtered)
         print("All categories:")
         for cat in sorted(categories):
             print(f"  - {cat}")
     elif args.category:
-        filtered = [e for e in expenses if e["category"].lower() == args.category.lower()]
-        if not filtered:
-            print(f"No expenses found for category '{args.category}'")
+        filtered = [e for e in filtered if e["category"].lower() == args.category.lower()]
+        print(f"Expenses for category '{args.category}':")
+        print_expenses_table(filtered)
     else:
-        id_len = 4
-        description_len = 12
-        amount_len = 8
-        category_len = 8
-        date_len = 10
-        for expense in expenses:
-            if len(str(expense["id"])) > id_len: id_len = len(str(expense["id"])) 
-            if len(expense["description"]) > description_len: description_len = len(expense["description"]) 
-            if len(str(expense["amount"])) > amount_len: amount_len = len(str(expense["amount"])) 
-            if len(expense["category"]) > category_len: category_len = len(expense["category"]) 
-            if len(expense["date"]) > date_len:  date_len = len(str(expense["date"])) 
-
-        headers = f"{'ID':<{id_len}} {'Description':<{description_len}} {'Amount':<{amount_len}} {'Category':<{category_len}} {'Date':<{category_len}}"
-
-        if not expenses:
-            print("No tasks found!")
-        else:
-            print("List of all tasks:")
-            print(headers)
-            for expense in expenses:
-                print(f"{expense["id"]:<{id_len}} {expense["description"]:<{description_len}} {expense["amount"]:<{amount_len}} {expense["category"]:<{category_len}} {expense["date"][:19].replace("T", " "):<25}")
+        print("List of all expenses:")
+        print_expenses_table(filtered)
 
 def list_summary(args, expenses):
     count = 0
@@ -172,28 +204,55 @@ def set_budget(args, budget_data):
                 print(f"  {calendar.month_name[int(month)]}: ${amount}")
 
 def budget_warn(budget_data, expenses):
-    for year in budget_data:
-        year_sum = 0
-        for expense in expenses:
-            date = datetime.datetime.fromisoformat(expense["date"])
-            if int(year) == date.year: 
-                year_sum += expense["amount"]
-        if budget_data[year]['budget'] < year_sum and budget_data[year]['budget'] != 0:
-            print(f"Budget for {year} exeeded! Year budget is ${budget_data[year]['budget']}, but you spent ${year_sum}!")    
-        for month, amount in budget_data[year]["months"].items():
-            month_sum = 0
-            for expense in expenses:
-                date = datetime.datetime.fromisoformat(expense["date"])
-                if int(month) == date.month:
-                    month_sum += expense["amount"]
-            if budget_data[year]["months"][month] < month_sum and budget_data[year]["months"][month] != 0:  
-                print(f"Budget for {calendar.month_name[int(month)]} {year} exceeded! Month budget is ${amount}, but you spent ${month_sum}!")
+    now = datetime.datetime.now()
+    current_year = str(now.year)
+    current_month = str(now.month)
 
-def export_csv(args, expenses):
-    with open("expenses.csv", "w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=["id", "description", "amount", "date", "category"])
-        writer.writeheader()
-        writer.writerows(expenses)
+    if current_year not in budget_data:
+        return
+
+    year_sum = 0
+    for expense in expenses:
+        date = datetime.datetime.fromisoformat(expense["date"])
+        if now.year == date.year:
+            year_sum += expense["amount"]
+    if budget_data[current_year]['budget'] < year_sum and budget_data[current_year]['budget'] != 0:
+        print(f"Budget for {current_year} exceeded! Year budget is ${budget_data[current_year]['budget']}, but you spent ${year_sum}!")
+
+    if current_month not in budget_data[current_year]["months"]:
+        return
+    month_sum = 0
+    for expense in expenses:
+        date = datetime.datetime.fromisoformat(expense["date"])
+        if now.year == date.year and now.month == date.month:
+            month_sum += expense["amount"]
+    month_budget = budget_data[current_year]["months"][current_month]
+    if month_budget < month_sum and month_budget != 0:
+        print(f"Budget for {calendar.month_name[now.month]} {current_year} exceeded! Month budget is ${month_budget}, but you spent ${month_sum}!")
+
+def export_csv(args, expenses, budget_data):
+    if not args.expenses and not args.budget:
+        print("Specify --expenses or --budget (or both)")
+        return
+    
+    if args.expenses:
+        filename = args.output if args.output else "expenses.csv"
+        with open(filename, "w", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=["id", "description", "amount", "date", "category"])
+            writer.writeheader()
+            writer.writerows(expenses)
+        print(f"Expenses exported to {filename}")
+
+    if args.budget:
+        filename = args.output if args.output else "budget.csv"
+        with open(filename, "w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["year", "yearly_budget", "month", "monthly_budget"])
+            for year, data in sorted(budget_data.items()):
+                writer.writerow([year, data["budget"], "", ""])
+                for month, amount in sorted(data["months"].items(), key=lambda x: int(x[0])):
+                    writer.writerow(["", "", calendar.month_name[int(month)], amount])
+        print(f"Budget exported to {filename}")
 
 if __name__ == "__main__":
 # Open JSON
@@ -208,6 +267,11 @@ if __name__ == "__main__":
             budget_data = json.load(file)
     except (FileNotFoundError, json.JSONDecodeError):
         budget_data = {}
+
+# If no command 
+    if args.command is None:
+        parser.print_help()
+        sys.exit(1)
 
 # Main commands
     if args.command == "add":
@@ -229,7 +293,7 @@ if __name__ == "__main__":
         list_summary(args, expenses)
 
     elif args.command == "export":
-        export_csv(args, expenses)
+        export_csv(args, expenses, budget_data)
 
 # Save to JSON
     with open("expenses.json", "w") as file:
